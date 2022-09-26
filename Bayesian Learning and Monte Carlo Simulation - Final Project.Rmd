@@ -1,0 +1,346 @@
+---
+title: "Bayesian learning and Monte Carlo Simulations: final project"
+author: "Inês Jorge da Silva e Ferreira  and  André Guilherme dos Santos Neto"
+date: "`r Sys.Date()`"
+output: 
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+\section{Problem Statement}
+
+Forest fires are a major environmental issue, creating economical and ecological damage while endangering animal and human lives. Therefore, fast detection is a key element for controlling such phenomenon. In this project we modeled the burnt area of the forest as a function of the variables x-axis coordinate (from 1 to 9), y-axis coordinate (from 1 to 9), Month of the year (January to December) day Day of the week (Monday to Sunday), FFMC code, DMC code, DC code, ISI index, Outside temperature (in ◦C), Outside relative humidity (in %) wind, Outside wind speed (in km/h), Outside rain (in mm/m2) to assist in prediction of the future eventuality.
+
+\section{Data Description}
+
+The Forest Fire Index (FWI) is the Canadian system for rating fire danger and it includes six components: Fine Fuel Moisture Code (FFMC), Duff Moisture Code (DMC), Drought Code (DC), Initial Spread Index (ISI), Buildup Index (BUI) and FWI. The first three are related to fuel codes, the FFMC denotes the moisture content surface litter and influences ignition and fire spread while DMC and DC represent the moisture content of shallow and deep organic layers which affect fire intensity. The ISI is a score that correlates with fire velocity spread while BUI represents the amount of available fuel. The FWI index is an indicator of fire intensity. Although different scales are used for each of the FWI elements, high values suggest more severe burning conditions. Also, the fuel moisture codes require a memory (time lag) of past weather conditions i.e., 16 hours for FFMC, 12 days for DMC and 52 days for DC. This data contains 13 variables and 517 observations as described above.
+
+For the purpose of reading correctly and data analysis we highlight the 13 data variables as follows
+
+```{=tex}
+\begin{enumerate}
+\item \textbf{X} (int) - x-axis spatial coordinate within the Montesinho park map: 1 to 9
+\item \textbf{Y} (int) - y-axis spatial coordinate within the Montesinho park map: 2 to 9
+\item \textbf{month} (chr) - month of the year: "jan" to "dec"
+\item \textbf{day} (chr) - day of the week: "mon" to "sun"
+\item \textbf{FFMC} (num) - Fine Fuel Moisture Code index from the FWI (Fire Weather Index) system: 18.7 to
+96.20
+\item \textbf{DMC} (num) - Duff Moisture Code index from the FWI system: 1.1 to 291.3
+\item \textbf{DC} (num) - Drought Code index from the FWI system: 7.9 to 860.6
+\item \textbf{ISI} (num) - Initial Spread Index from the FWI system: 0.0 to 56.10
+\item \textbf{temp} (num) - temperature in Celsius degrees: 2.2 to 33.30
+\item \textbf{RH} (int) - Relative Humidity in \%: 15.0 to 100
+\item \textbf{wind} (num) - wind speed in km/h: 0.40 to 9.40
+\item \textbf{rain} (num) - outside rain in mm/m2 : 0.0 to 6.4
+\item \textbf{area} (num) - the burned area of the forest (in ha): 0.00 to 1090.84
+\end{enumerate}
+```
+```{r setup, warning=FALSE,echo=FALSE,error=FALSE,message=FALSE}
+#Loading packages
+library(readxl)
+library(ggplot2)
+library(rstanarm)
+library(bayestestR)
+library(insight)
+library(runjags)
+library(tidyverse)
+library(Amelia)
+library(kableExtra)
+library(flextable)
+```
+
+```{r warning=FALSE,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+#Loading the dataset
+forestfire <- read.table("forestfire.txt")
+attach(forestfire)
+```
+
+\section{Model Specification}
+
+The model is represented as
+
+$Y_{i}|\beta_{0},\beta_{1},\beta_{2},\beta_{3},\beta_{4},\beta_{5},\beta_{6},\beta_{7},\beta_{8},\beta_{9},\sigma\overset{\text{ind}}{\sim}Normal(\beta_{0} + \beta_{1}x_{i},_{FFMC} + \beta_{2}x_{i},_{DMC} + \beta_{3}x_{i},_{DC} + \beta_{4}x_{i},_{ISI} + \beta_{5}x_{i},_{temp} + \beta_{6}x_{i},_{RH} + \beta_{7}x_{i},_{wind speed} + \beta_{8}x_{i},_{rain} + \beta_{9}x_{i},_{month},\sigma)$
+
+where $\beta_{i}'s$ are the coefficients of the variables
+
+\subsection{Likelihood}
+
+The likelihood function of the model is given by;
+
+$y_{i}|\mu_{i},\sigma \overset{\text{ind}}{\sim} Normal(\mu_{i},\sigma), i= 1, \dots, n$, $\mu_{i}$ is the response which linear to the coefficient parameter. Where given the data point, the equation is represented as
+
+$N(y_{i}|Xw,\sigma^{2}I_{n}) = (2\pi\sigma^{2})^{-n/2}exp(-\frac{1}{2\sigma^{2}}(y-Xw)^{T}(y-Xw))$
+
+where $w = (X^{T}X)^{-1}X^{T}y$
+
+\subsection{Priors}
+
+Since we have limited information on the regression parameters we assume weakly informative priors. Assuming independence, the prior density for the parameters $\beta_{0},\beta_{1},\beta_{2},\beta_{3},\beta_{4},\beta_{5},\beta_{6},\beta_{7},\beta_{8},\beta_{9},\sigma$
+
+where $\beta0 \sim Normal (mu_{0}, sigma_{0})$, $\beta1 \sim Normal(mu_{1}, sigma_{1})$, $\beta2 \sim Normal(mu_{2}, sigma_{2})$, $\beta3 \sim Normal(mu_{3}, sigma_{3})$, $\beta4 \sim Normal(mu_{4}, sigma_{4})$, $\beta5 \sim Normal(mu_{5}, sigma_{5})$, $\beta6 \sim Normal(mu_{6}, sigma_{6})$, $\beta7 \sim Normal(mu_{7}, sigma_{7})$, $\beta8 \sim Normal(mu_{8}, sigma_{8})$, $\beta9 \sim Normal(mu_{9}, sigma_{9})$, and the precision parameter $\phi=1 / \sigma^2$, the inverse of the variance $\sigma^2$, is $Gamma(a, b)$.
+
+Because we have little information about the location of the regression parameters $\beta_{0},\beta_{1},\beta_{2},\beta_{3},\beta_{4},\beta_{5},\beta_{6},\beta_{7},\beta_{8}$ and $\beta_{9}$, we assign the respective prior means to be 0 and the prior standard deviations as the standard deviations of the data variables. And the values of the hyperparameters $a$ and $b$ are assumed as $a=b=0.001$ for Gamma prior the precision is given by $\phi= 1 / \sigma^2$.
+
+```{r warning=FALSE,echo=FALSE,error=TRUE,message=FALSE,warning=FALSE}
+#Grouping data
+forest <- forestfire %>% group_by(month)
+```
+
+```{r warning=FALSE,echo=FALSE,error=TRUE,message=FALSE,warning=FALSE}
+modelString <-"
+model {
+## sampling
+for (i in 1:N){
+   y[i] ~ dnorm(beta0 + beta1*FFMC[i] +
+              beta2*DMC[i]+beta3*DC[i]+beta4*ISI[i]+beta5*temp[i]+beta6*RH[i]+beta7*wind[i]+beta8*rain[i]+beta9*month[i], invsigma2)
+}
+## priors
+beta0 ~ dnorm(mu0, sigma_0)
+beta1 ~ dnorm(mu1, sigma_1)
+beta2 ~ dnorm(mu2, sigma_2)
+beta3 ~ dnorm(mu3, sigma_3)
+beta4 ~ dnorm(mu4, sigma_4)
+beta5 ~ dnorm(mu5, sigma_5)
+beta6 ~ dnorm(mu6, sigma_6)
+beta7 ~ dnorm(mu7, sigma_7)
+beta8 ~ dnorm(mu8, sigma_8)
+beta9 ~ dnorm(mu9, sigma_9)
+invsigma2 ~ dgamma(a, b)
+sigma <- sqrt(pow(invsigma2, -1))
+}
+"
+y <- forest$area
+FFMC <- forest$FFMC
+DMC <- forest$DMC
+DC <- forest$DC
+ISI <- forest$ISI
+temp <- forest$temp
+RH <- forest$RH
+wind <- forest$wind
+rain <- forest$rain
+month <- as.factor(forest$month)
+N <- length(y)
+s0 <- 0.01
+s1 <- 1/(var(forest$FFMC))
+s2 <- 1/(var(forest$DMC))
+s3 <- 1/(var(forest$DC))
+s4 <-1/(var(forest$ISI))
+s5 <- 1/(var(forest$temp))
+s6 <- 1/(var(forest$RH))
+s7 <- 1/(var(forest$wind))
+s8 <- 1/(var(forest$rain))
+  
+the_data <- list("y" = y, "FFMC" = FFMC,
+                 "DMC" = DMC,"DC"=DC,"ISI"=ISI,"temp"=temp,"RH"=RH,"wind"=wind,"rain"=rain,"month"=month,"N" = N,
+                 "mu0" = 0, "sigma_0" = s0,
+                 "mu1" = 0, "sigma_1" = s1,
+                 "mu2" = 0, "sigma_2" = s2,
+                 "mu3" = 0, "sigma_3" = s3,
+                 "mu4" = 0, "sigma_4" = s4,
+                 "mu5" = 0, "sigma_5" = s5,
+                 "mu6" = 0, "sigma_6" = s6,
+                 "mu7" = 0, "sigma_7" = s7,
+                 "mu8" = 0, "sigma_8" = s8,
+                 "mu9" = 0, "sigma_9" = 0.001,
+                 "a" = 0.001, "b" = 0.001)
+posterior <- run.jags(modelString,
+                      n.chains = 2,
+                      data = the_data,
+                      monitor = c("beta0", "beta1",
+                                  "beta2","beta3","beta4","beta5","beta6","beta7","beta8","beta9", "sigma"),
+                      burnin = 2000,
+                      sample = 5000)
+#Posterior summary
+print(posterior, digits = 3)
+```
+
+\section{Posterior Analysis}
+
+When the model includes all the variables the following posterior results were generated, From the table we observe that no variable was predictor which was significant since the parameters confidence intervals covers zeros, this indicates that not all the variables are helpful in predicting the burn area.
+
+```{=tex}
+\begin{table}[H]
+\setlength\tabcolsep{4.5pt} % default value: 6pt
+\centering
+\caption{Table for parameter confidence intervals, median and mean}
+\begin{tabular}{@{} p{2cm}p{2cm}p{2cm}p{2cm}p{2cm}p{2cm} @{}}
+\toprule
+      &\textbf{Lower95}&\textbf{Upper95}&\textbf{Median}&\textbf{Mean}&\textbf{SD}\\ \hline 
+beta0   &-18.1   &20.4&0.665        &0.524   &9.92 \\ 
+beta1  &-0.584  &0.415&-0.0727    &-0.0729  &0.257\\    
+beta2 &-0.0237   &0.247&0.112      & 0.113 &0.0698\\   
+beta3 &-0.0518 &0.019&-0.0176     &-0.0175 &0.0184 \\  
+beta4   & -1.9  &0.83&-0.512       &-0.509  &0.697 \\  
+beta5  &-0.533  &2.56& 0.913        &0.932  &0.766  \\ 
+beta6  &-0.553  &0.244&-0.168      &-0.165  &0.203  \\ 
+beta7   &-1.49  &3.33& 0.945        & 0.94   &1.23  \\ 
+beta8  &-0.582 &0.569&0.00202    &-0.00103  &0.296  \\ 
+beta9  &-0.553   &2.41&0.968        &0.963  &0.759  \\ 
+sigma   & 59.8    &67.7&63.6         &63.6   &2.03  \\ 
+\midrule
+\end{tabular}
+\end{table}
+```
+```{r warning=FALSE,echo=FALSE,error=TRUE,message=FALSE,warning=FALSE}
+modelString1 <-"
+model {
+## sampling
+for (i in 1:N){
+   y[i] ~ dnorm(beta0 +beta5*temp[i]+beta6*RH[i]+beta7*wind[i]+beta8*rain[i], invsigma2)
+}
+## priors
+beta0 ~ dnorm(mu0, sigma_0)
+beta5 ~ dnorm(mu5, sigma_5)
+beta6 ~ dnorm(mu6, sigma_6)
+beta7 ~ dnorm(mu7, sigma_7)
+beta8 ~ dnorm(mu8, sigma_8)
+invsigma2 ~ dgamma(a, b)
+sigma <- sqrt(pow(invsigma2, -1))
+}
+"
+y <- forest$area
+temp <- forest$temp
+RH <- forest$RH
+wind <- forest$wind
+rain <- forest$rain
+N <- length(y)
+s0 <- 0.01
+s5 <- 1/(var(forest$temp))
+s6 <- 1/(var(forest$RH))
+s7 <- 1/(var(forest$wind))
+s8 <- 1/(var(forest$rain))
+  
+the_data1 <- list("y" = y,"temp"=temp,"RH"=RH,"wind"=wind,"rain"=rain,"N" = N,
+                 "mu0" = 0, "sigma_0" = s0,
+                 "mu5" = 0, "sigma_5" = s5,
+                 "mu6" = 0, "sigma_6" = s6,
+                 "mu7" = 0, "sigma_7" = s7,
+                 "mu8" = 0, "sigma_8" = s8,
+                 "a" = 0.001, "b" = 0.001)
+
+posterior1 <- run.jags(modelString1,
+                      n.chains = 2,
+                      data = the_data1,
+                      monitor = c("beta0","beta5","beta6","beta7","beta8", "sigma"),
+                      burnin = 2000,
+                      sample = 5000)
+#Posterior summary
+print(posterior1, digits = 3)
+```
+
+When the model was fitted with the independent variables temperature, relative humidity, wind speed and rain the following posterior results were found, From the table we observe that temperature variable is the only significant predictor since the parameter confidence intervals (0.199,0.916) do not cover zero, this indicates that temperature is helpful in predicting the burn area.
+
+```{=tex}
+\begin{table}[H]
+\setlength\tabcolsep{4.5pt} % default value: 6pt
+\centering
+\caption{Table for parameter confidence intervals, median and mean}
+\begin{tabular}{@{} p{2cm}p{2cm}p{2cm}p{2cm}p{2cm}p{2cm} @{}}
+\toprule
+      &\textbf{Lower95}&\textbf{Upper95}&\textbf{Median}&\textbf{Mean}&\textbf{SD}\\ \hline 
+beta0   &-19.4   &16.2 &-1.01   &-1.06  &9.02\\
+beta5   &0.199   &1.63&0.916        &0.918 &0.366\\
+beta6  &-0.405  &0.154&-0.136      &-0.136 &0.143\\
+beta7   &-1.53   & 2.9 &0.642       &0.657  &1.14\\
+beta8  &-0.581 &0.592&-0.0106    &-0.00474 &0.297\\
+sigma    &59.7    &67.4&63.5         &63.5  &1.97\\
+\midrule
+\end{tabular}
+\end{table}
+```
+After finding out that temperature is one of the main factor in predicting the burn area, we now fit the new model with the variable. The following table shows the summary posterior results of the selected model with significant variable (temperature).
+
+```{r warning=FALSE,echo=FALSE,error=TRUE,message=FALSE,warning=FALSE}
+modelString2 <-"
+model {
+## sampling
+for (i in 1:N){
+   y[i] ~ dnorm(beta0 +beta5, invsigma2)
+}
+## priors
+beta0 ~ dnorm(mu0, sigma_0)
+beta5 ~ dnorm(mu5, sigma_5)
+invsigma2 ~ dgamma(a, b)
+sigma <- sqrt(pow(invsigma2, -1))
+}
+"
+y <- forest$area
+temp <- forest$temp
+N <- length(y)
+s0 <- 0.01
+s5 <- 1/(var(forest$temp))
+  
+the_data2 <- list("y" = y,"temp"=temp,"N" = N,
+                 "mu0" = 0, "sigma_0" = s0,
+                 "mu5" = 0, "sigma_5" = s5,
+                 "a" = 0.001, "b" = 0.001)
+
+posterior2 <- run.jags(modelString2,
+                      n.chains = 2,
+                      data = the_data2,
+                      monitor = c("beta0","beta5", "sigma"),
+                      burnin = 2000,
+                      sample = 5000)
+#Posterior summary
+print(posterior2, digits = 3)
+```
+
+```{=tex}
+\begin{table}[H]
+\setlength\tabcolsep{4.5pt} % default value: 6pt
+\centering
+\caption{Table for parameter confidence intervals, median and mean}
+\begin{tabular}{@{} p{2cm}p{2cm}p{2cm}p{2cm}p{2cm}p{2cm} @{}}
+\toprule
+      &\textbf{Lower95}&\textbf{Upper95}&\textbf{Median}&\textbf{Mean}&\textbf{SD}\\ \hline 
+beta0   &-1.49   &19.8&8.92     &8.91 &5.44\\
+beta5   &-6.42   &13.4&3.11      &3.2 &5.11\\
+sigma    &59.8   &67.6&63.7     &63.8 &2.01\\
+\midrule
+\end{tabular}
+\end{table}
+```
+```{r warning=FALSE,echo=FALSE,error=TRUE,message=FALSE,warning=FALSE}
+#Computing DIC of the model
+extract.runjags(posterior, "dic")
+#Computing DIC of the model
+extract.runjags(posterior1, "dic")
+#Computing DIC of the model
+extract.runjags(posterior2, "dic")
+```
+
+\section{Moodel Comparison}
+
+From the table we observe that the model with independent variables temperature, relative humidity, wind speed and rain is the most plausible model to predict the burn area, the model has DIC 5763 compared with the model with all the varibale included DIC 5768 and the model with only temperature as independent varible DIC 5765.
+
+```{=tex}
+\begin{table}[H]
+\setlength\tabcolsep{4.5pt} % default value: 6pt
+\centering
+\caption{Model Comparison}
+\begin{tabular}{@{} p{4cm}p{4cm} @{}}
+\toprule
+Model&\textbf{DIC}\\ \hline 
+Model1&5768\\
+Model2&5763\\
+Model3&5765\\
+\midrule
+\end{tabular}
+\end{table}
+```
+\section{Plots of the posterior distributions}
+
+The posterior distribution plots are presented in the appendix
+
+\section{Conclusion}
+
+From the analysis we observe that temperature in Celsius degrees: 2.2 to 33.30 was the significant variable in predicting the area the burned area of the forest (in ha) 0.00 to 1090.84, we also observe that a model with independent variables temperature, relative humidity, wind speed and rain is the most plausible model to predict the burned area.
+
+\section{Appendix}
+
+The following plots shows the trace plots and autocorrelation of the parameters
+
+```{r warning=FALSE,echo=FALSE,error=TRUE,message=FALSE,warning=FALSE}
+plot(posterior)
+```
